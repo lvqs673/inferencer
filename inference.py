@@ -14,15 +14,18 @@ class Forward(ABC):
         super().__init__()
         self.device = None  #  device为rank所对应的显卡
 
+    def __call__(self, *args: Any, **kwds: Any) -> Any:
+        return self.forward(*args, **kwds)
+
     @abstractmethod
-    def __call__(self, model: nn.Module, batch_data: Any) -> Any:
+    def forward(self, model: nn.Module, batch_data: Any) -> Any:
         pass
 
 
 """
 一个例子：
 class MyForward(Forward):    
-    def __call__(self, model: nn.Module, batch_data: list[int]) -> Tensor:
+    def forward(self, model: nn.Module, batch_data: list[int]) -> Tensor:
         inputs = collate_fn(batch_data)  # pad to max_length and convert to Tensor
         inputs = inputs.to(self.device)
         return model.forward(inputs).cpu()

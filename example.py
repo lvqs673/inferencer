@@ -1,6 +1,8 @@
+from typing import Any
 import torch
 import torch.nn as nn
 import torch.multiprocessing as mp
+from torch.nn.modules import Module
 from inference import *
 
 import os
@@ -15,7 +17,7 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "4,5,6,7"
 
 注意点:
     在自己实现的Forward类中, 可以自定义更复杂的推理方法
-    但需要注意,Tensor必须放到device上, 推理的结果最好放到cpu上避免显存溢出
+    但需要注意, Tensor必须放到device上, 推理的结果最好放到cpu上避免显存溢出
 
 使用方法:
     给出下面五个参数即可：
@@ -62,7 +64,7 @@ class Model(nn.Module):
 
 
 class MyForward(Forward):
-    def __call__(self, model: nn.Module, batch_data: torch.Tensor) -> torch.Tensor:
+    def forward(self, model: nn.Module, batch_data: torch.Tensor) -> torch.Tensor:
         inputs = batch_data.to(self.device)
         return model(inputs).cpu()
 
