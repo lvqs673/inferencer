@@ -22,8 +22,8 @@ class Forward(ABC):
 """
 一个例子：
 class MyForward(Forward):    
-    def __call__(self, model: Module, batch_data: list[int]) -> Tensor:
-        batch_data = collate_fn(batch_data)  # pad to max_length and convert to Tensor
+    def __call__(self, model: nn.Module, batch_data: list[int]) -> Tensor:
+        inputs = collate_fn(batch_data)  # pad to max_length and convert to Tensor
         inputs = inputs.to(self.device)
         return model.forward(inputs).cpu()
 """
