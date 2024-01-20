@@ -3,11 +3,11 @@ import torch
 import torch.nn as nn
 import torch.multiprocessing as mp
 from torch.nn.modules import Module
-from inference import *
-
+from inference1 import *
+import time
 import os
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "4,5,6,7"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2,3"
 
 
 """
@@ -43,7 +43,7 @@ dim1 = 1000
 dim2 = 1000
 nproc = torch.cuda.device_count()
 
-data_size = int(1e6)  # 数据大小
+data_size = int(5e6)  # 数据大小
 batch_size = 2000
 
 
@@ -76,6 +76,7 @@ def test_ddp_inference():
     data = torch.randn(data_size, dim1)
     forward_fn = MyForward()
 
+    stt=time.time()
     batch_outputs: list[Tensor] = Inferencer(
         model=model,
         data=data,
@@ -83,7 +84,7 @@ def test_ddp_inference():
         forward_fn=forward_fn,
         nproc=nproc,
     ).inference()
-
+    print(f"cost time: {time.time()-stt:.2f}")
     # 如果推理的每个batch都是一个Tensor的话，最后用torch.cat合并一次更高效
     outputs = torch.cat(batch_outputs)
 

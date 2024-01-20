@@ -54,41 +54,64 @@ class Inferencer:
         beg = 0
         for i in range(self.world_size):
             end = beg + c + (i < r)
-            yield self.data[beg:end]
+            yield (beg, end, self.data[beg:end])
             beg = end
 
     def inference(self) -> list[Any]:
-        results = [None] * self.world_size
-        with mp.Pool(processes=self.world_size) as pool:
-            results_futures = [
-                pool.apply_async(
-                    func=inference_worker,
-                    args=(rank, self.model, sub_data, self.batch_size, self.forward_fn),
-                )
-                for rank, sub_data in enumerate(self.split_data())
-            ]
+        input_queue = mp.Queue(maxsize=self.world_size)
+        result_queue = mp.Queue(maxsize=self.world_size)
+        done_event = mp.Event()
 
-            for f in results_futures:
-                rank, result = f.get()
-                results[rank] = result
+        for input_args in self.split_data():
+            input_queue.put(input_args)
+
+        procs = []
+        for rank in range(self.world_size):
+            inference_args = {
+                "local_rank": rank,
+                "model": self.model,
+                "forward_fn": self.forward_fn,
+                "batch_size": self.batch_size,
+            }
+            proc = mp.Process(
+                target=inference_worker,
+                args=(inference_args, input_queue, result_queue, done_event),
+            )
+            proc.start()
+            procs.append(proc)
+
+        # results[i]第i个进程计算的每个批次的结果的列表
+        results: list[tuple[int, int, list[Any]]] = [
+            result_queue.get() for _ in range(self.world_size)
+        ]
+        done_event.set()
+        for proc in procs:
+            proc.join()
+
+        results.sort(key=lambda x: x[0])
 
         # 返回每个batch的结果的列表
-        return [output for result in results for output in result]
+        return [output for beg, end, result in results for output in result]
 
 
 # 用来推理的进程
 def inference_worker(
-    rank: int,
-    model: nn.Module,
-    data: list | ndarray | Tensor,
-    batch_size: int,
-    forward_fn: Forward,
+    inference_args: dict[str, Any],
+    input_queue: mp.Queue,
+    result_queue: mp.Queue,
+    done_event: mp.Event,
 ):
-    device = torch.device(f"cuda:{rank}")
+    local_rank = inference_args["local_rank"]
+    model = inference_args["model"]
+    forward_fn = inference_args["forward_fn"]
+    batch_size = inference_args["batch_size"]
+
+    device = torch.device(f"cuda:{local_rank}")
     forward_fn.device = device
     model.to(device)
     model.eval()
 
+    (beg, end, data) = input_queue.get()
     n = len(data)
     n_batch = n // batch_size + (n % batch_size != 0)
 
@@ -99,4 +122,7 @@ def inference_worker(
             outputs = forward_fn(model, data[i:j])
             results.append(outputs)
 
-    return rank, results
+    result_queue.put((beg, end, results))
+
+    while not done_event.is_set():
+        done_event.wait()
